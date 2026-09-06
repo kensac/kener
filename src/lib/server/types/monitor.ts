@@ -2,6 +2,7 @@
 
 import type { PingHost, PingMonitorTypeData } from "$lib/types/ping.js";
 import type { TcpHost, TcpMonitorTypeData } from "$lib/types/tcp.js";
+import type { DockerMonitorTypeData } from "$lib/types/docker.js";
 
 export interface MonitoringResult {
   status: string;
@@ -96,6 +97,28 @@ export interface GrpcMonitorTypeData {
   timeout?: number;
 }
 
+export interface PrometheusThreshold {
+  operator: ">" | ">=" | "<" | "<=" | "==" | "!=";
+  value: number;
+}
+
+export interface PrometheusMonitorTypeData {
+  url: string; // Prometheus base URL, e.g. https://prom.example.com or https://host/prom
+  query: string; // PromQL instant query
+  down?: PrometheusThreshold; // matches when `metricValue <operator> value` -> DOWN
+  degraded?: PrometheusThreshold; // matches when `metricValue <operator> value` -> DEGRADED
+  noDataStatus?: "UP" | "DEGRADED" | "DOWN"; // empty-result status, default "DOWN"
+  // Status for "Prometheus did not answer": transport failure, timeout, non-2xx, or a
+  // malformed/non-success payload. Default "DOWN". Distinct from noDataStatus, which covers a
+  // successful query that matched nothing — a lost scrape and an empty result mean different
+  // things, and a monitor charting a capacity metric usually wants the former to read DEGRADED
+  // rather than announce a false outage.
+  errorStatus?: "UP" | "DEGRADED" | "DOWN";
+  headers?: { key: string; value: string }[]; // optional; secret substitution applies
+  timeout?: number; // ms, default 10000
+  allowSelfSignedCert?: boolean; // default false
+}
+
 export type MonitorTypeData =
   | ApiMonitorTypeData
   | DnsMonitorTypeData
@@ -106,7 +129,9 @@ export type MonitorTypeData =
   | HeartbeatMonitorTypeData
   | GroupMonitorTypeData
   | GamedigMonitorTypeData
-  | GrpcMonitorTypeData;
+  | GrpcMonitorTypeData
+  | PrometheusMonitorTypeData
+  | DockerMonitorTypeData;
 
 export interface Monitor<T = MonitorTypeData> {
   tag: string;
@@ -125,6 +150,8 @@ export type HeartbeatMonitor = Monitor<HeartbeatMonitorTypeData>;
 export type GroupMonitor = Monitor<GroupMonitorTypeData>;
 export type GamedigMonitor = Monitor<GamedigMonitorTypeData>;
 export type GrpcMonitor = Monitor<GrpcMonitorTypeData>;
+export type PrometheusMonitor = Monitor<PrometheusMonitorTypeData>;
+export type DockerMonitor = Monitor<DockerMonitorTypeData>;
 
 export interface EvalResponse {
   status?: string;

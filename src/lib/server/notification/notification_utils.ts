@@ -5,6 +5,7 @@ import type { SiteDataTransformed } from "../controllers/siteDataController.js";
 import { format } from "date-fns";
 import mdToHTML from "../..//marked.js";
 import serverResolver from "../resolver.js";
+import { parseDbTimestamp } from "../tool.js";
 
 export function alertToVariables(
   config: MonitorAlertConfigRecord,
@@ -12,13 +13,12 @@ export function alertToVariables(
   siteVars: SiteDataForNotification,
   monitorTag?: string,
 ): AlertVariableMap {
-  const createdAtDate = alert.created_at instanceof Date ? alert.created_at : new Date(alert.created_at);
+  const createdAtDate = parseDbTimestamp(alert.created_at);
   const effectiveMonitorTag = monitorTag || config.monitor_tag || "unknown";
-  const alert_name = `Alert ${effectiveMonitorTag} for ${config.alert_for} ${config.alert_value} ${alert.alert_status} at ${createdAtDate.toISOString()}`;
 
   return {
     alert_id: alert.id,
-    alert_name: alert_name,
+    alert_name: effectiveMonitorTag,
     alert_for: config.alert_for,
     alert_value: config.alert_value,
     alert_status: alert.alert_status,

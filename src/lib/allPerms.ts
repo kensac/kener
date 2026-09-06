@@ -5,7 +5,7 @@
  * Mapping from actions → permissions:
  *
  * monitors.read      → getMonitors, getMonitoringDataPaginated
- * monitors.write     → storeMonitorData, updateMonitoringData, deleteMonitor, deleteMonitorData, cloneMonitor, testMonitor
+ * monitors.write     → storeMonitorData, updateMonitoringData, deleteMonitor, deleteMonitorData, cloneMonitor, testMonitor, listDockerContainers
  *
  * incidents.read     → getIncidents, getIncident, getComments
  * incidents.write    → createIncident, updateIncident, deleteIncident, addMonitor, removeMonitor, addComment, deleteComment, updateComment
@@ -124,6 +124,7 @@ export const ACTION_PERMISSION_MAP: Record<string, string | null> = {
   deleteMonitorData: "monitors.write",
   cloneMonitor: "monitors.write",
   testMonitor: "monitors.write",
+  listDockerContainers: "monitors.write",
 
   // Incidents
   getIncidents: "incidents.read",
@@ -221,6 +222,13 @@ export const ACTION_PERMISSION_MAP: Record<string, string | null> = {
   updateRolePermissions: "roles.assign_permissions",
   addUserToRole: "roles.assign_users",
   removeUserFromRole: "roles.assign_users",
+
+  // OIDC
+  getOidcGroupRoleMappings: "settings.read",
+  upsertOidcGroupRoleMapping: "settings.write",
+  deleteOidcGroupRoleMapping: "settings.write",
+  testOidcConnection: "settings.write",
+  getOidcSettingsMasked: "settings.read",
 };
 
 export const ROUTE_PERMISSION_MAP: Record<string, string | null> = {
@@ -273,4 +281,7 @@ export const ROUTE_PERMISSION_MAP: Record<string, string | null> = {
 
   // Roles
   "/(manage)/manage/app/roles": "roles.read",
+
+  // OIDC
+  "/(manage)/manage/app/oidc": "settings.read",
 };

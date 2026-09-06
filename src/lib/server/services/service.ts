@@ -9,6 +9,8 @@ import HeartbeatCall from "./heartbeatCall.js";
 import GamedigCall from "./gamedigCall.js";
 import NoneCall from "./noneCall.js";
 import GrpcCall from "./grpcCall.js";
+import PrometheusCall from "./prometheusCall.js";
+import DockerCall from "./dockerCall.js";
 
 import type {
   ApiMonitor,
@@ -21,6 +23,8 @@ import type {
   HeartbeatMonitor,
   GamedigMonitor,
   GrpcMonitor,
+  PrometheusMonitor,
+  DockerMonitor,
   MonitoringResult,
   NoneMonitor,
 } from "../types/monitor.js";
@@ -36,6 +40,8 @@ type ServiceCall =
   | HeartbeatCall
   | GamedigCall
   | GrpcCall
+  | PrometheusCall
+  | DockerCall
   | NoneCall;
 
 export interface MonitorWithType {
@@ -69,6 +75,10 @@ class Service {
       this.service = new GamedigCall(monitor as GamedigMonitor);
     } else if (monitor.monitor_type === "GRPC") {
       this.service = new GrpcCall(monitor as GrpcMonitor);
+    } else if (monitor.monitor_type === "PROMETHEUS") {
+      this.service = new PrometheusCall(monitor as PrometheusMonitor);
+    } else if (monitor.monitor_type === "DOCKER") {
+      this.service = new DockerCall(monitor as DockerMonitor);
     } else {
       this.service = new NoneCall(monitor as NoneMonitor);
     }
