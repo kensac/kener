@@ -1,7 +1,28 @@
 import { afterEach, describe, expect, it } from "vitest";
 import express from "express";
+import http from "node:http";
 import type { Server } from "node:http";
 import { compressionMiddleware, isCompressionEnabled } from "./httpCompression";
+
+/**
+ * Fetches a URL and returns the bytes actually received on the socket.
+ *
+ * `fetch` transparently decodes a gzip response, so it cannot be used to
+ * measure what went over the wire. node's http client does not decode, so the
+ * chunk lengths here are the real transfer size.
+ */
+function wireBytes(url: string, acceptEncoding: string): Promise<{ bytes: number; encoding: string | undefined }> {
+  return new Promise((resolve, reject) => {
+    const req = http.get(url, { headers: { "Accept-Encoding": acceptEncoding } }, (res) => {
+      let bytes = 0;
+      res.on("data", (chunk: Buffer) => {
+        bytes += chunk.length;
+      });
+      res.on("end", () => resolve({ bytes, encoding: res.headers["content-encoding"] }));
+    });
+    req.on("error", reject);
+  });
+}
 
 let server: Server | null = null;
 
@@ -71,20 +92,25 @@ describe("compression middleware", () => {
     expect(res.headers.get("content-encoding")).toBeNull();
   });
 
-  it("makes a repetitive payload much smaller", async () => {
-    const withOut = await startApp(false);
-    const rawBytes = (await (await fetch(withOut + "/payload")).arrayBuffer()).byteLength;
-    await new Promise<void>((resolve) => server!.close(() => resolve()));
-    server = null;
+  it("makes a repetitive payload much smaller on the wire", async () => {
+    const base = await startApp(true);
 
-    const withIt = await startApp(true);
-    // undici decompresses transparently, so read the raw socket bytes instead.
-    const res = await fetch(withIt + "/payload", { headers: { "Accept-Encoding": "gzip" } });
-    expect(res.headers.get("content-encoding")).toBe("gzip");
-    const body = await res.text();
+    const plain = await wireBytes(base + "/payload", "identity");
+    const gzipped = await wireBytes(base + "/payload", "gzip");
 
-    // The decoded body is the same JSON either way; the win is on the wire.
-    expect(JSON.parse(body).data).toHaveLength(500);
-    expect(rawBytes).toBeGreaterThan(10000);
+    expect(plain.encoding).toBeUndefined();
+    expect(gzipped.encoding).toBe("gzip");
+
+    // Both numbers are real socket bytes from the same server, so this compares
+    // like with like. A repetitive JSON payload should shrink by a lot.
+    expect(plain.bytes).toBeGreaterThan(10000);
+    expect(gzipped.bytes).toBeLessThan(plain.bytes / 5);
+  });
+
+  it("returns the same JSON whether or not it was compressed", async () => {
+    const base = await startApp(true);
+    const compressed = await fetch(base + "/payload", { headers: { "Accept-Encoding": "gzip" } });
+    const plain = await fetch(base + "/payload", { headers: { "Accept-Encoding": "identity" } });
+    expect(await compressed.json()).toEqual(await plain.json());
   });
 });
