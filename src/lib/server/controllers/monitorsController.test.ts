@@ -28,7 +28,7 @@ beforeEach(() => {
 describe("monitor save: type_data.proxy scheme check", () => {
   // Node silently ignores a proxy URL that is not http(s)://, so a typo would run the check
   // unproxied and look UP. Save is the only place a typo can be caught.
-  const rejection = "Proxy URL must start with http:// or https://";
+  const rejection = "Proxy URL must be a valid http:// or https:// URL";
 
   it("rejects a non-http(s) proxy on create", async () => {
     await expect(CreateUpdateMonitor(apiMonitor({ proxy: "socks5://proxy:1080" }))).rejects.toThrow(rejection);
@@ -49,6 +49,23 @@ describe("monitor save: type_data.proxy scheme check", () => {
     await CreateUpdateMonitor(apiMonitor({ proxy: "" }));
     await CreateUpdateMonitor(apiMonitor({}));
     expect(mockedDb.insertMonitor).toHaveBeenCalledTimes(4);
+  });
+
+  it("rejects a malformed authority the URL parser cannot take", async () => {
+    // Node throws ERR_PROXY_INVALID_CONFIG on these while building the agents, which would
+    // fail the check itself rather than the save.
+    for (const proxy of ["http://proxy:abc", "http://:3128", "http://proxy:99999", "http://[::1"]) {
+      await expect(CreateMonitor(apiMonitor({ proxy }))).rejects.toThrow(rejection);
+    }
+    expect(mockedDb.insertMonitor).not.toHaveBeenCalled();
+  });
+
+  it("rejects a proxy that is not a string at all", async () => {
+    // type_data is parsed JSON: the API can hand us any shape here.
+    for (const proxy of [{}, 3128, true, ["http://proxy:3128"]]) {
+      await expect(CreateMonitor(apiMonitor({ proxy }))).rejects.toThrow(rejection);
+    }
+    expect(mockedDb.insertMonitor).not.toHaveBeenCalled();
   });
 
   it("leaves monitors without parseable type_data alone", async () => {

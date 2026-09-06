@@ -195,8 +195,8 @@ export const GetMonitorsParsed = async (query: MonitorFilter): Promise<Array<Mon
 };
 
 /**
- * type_data.proxy must be an http(s):// URL. Node silently ignores any other scheme, which
- * would run the check unproxied and report UP, so save is where a typo has to fail.
+ * type_data.proxy must be a valid http(s):// URL. Node silently ignores any other scheme and
+ * throws on a malformed authority, both at check time, so save is where a typo has to fail.
  * `$SECRET` tokens are still raw here and pass. Unparseable type_data is not this check's problem.
  */
 function validateTypeDataProxy(monitor: MonitorInput): void {
@@ -207,9 +207,13 @@ function validateTypeDataProxy(monitor: MonitorInput): void {
   } catch {
     return;
   }
+  // type_data is parsed JSON, so `proxy` can be any type. Absent or blank means no proxy;
+  // anything else - an object or a number included - has to be a proxy URL.
   const proxy = (typeData as { proxy?: unknown } | null)?.proxy;
-  if (typeof proxy === "string" && proxy.trim() !== "" && !IsValidProxyURL(proxy)) {
-    throw new Error("Proxy URL must start with http:// or https://");
+  if (proxy === undefined || proxy === null) return;
+  if (typeof proxy === "string" && proxy.trim() === "") return;
+  if (!IsValidProxyURL(proxy)) {
+    throw new Error("Proxy URL must be a valid http:// or https:// URL");
   }
 }
 

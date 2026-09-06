@@ -232,7 +232,7 @@ NO_PROXY=localhost,127.0.0.1,prometheus.lan,.internal
 **Important**:
 
 - Requires Node.js `>= 24.14`; the Docker image satisfies this.
-- Proxy credentials go in the URL: `http://user:pass@proxy.internal:3128`.
+- Proxy credentials go in the URL: `http://user:pass@proxy.internal:3128`. Percent-encode any reserved character in the username or password (`#` &rarr; `%23`, `/` &rarr; `%2F`, `?` &rarr; `%3F`, `@` &rarr; `%40`, `:` &rarr; `%3A`); an unencoded one changes where the URL ends. The same applies to a secret substituted into a monitor's **Proxy URL** &mdash; store the value already encoded.
 - `NO_PROXY` accepts exact hosts, `host:port`, `.suffix`, `*.host`, and IPv4 ranges (`10.0.0.1-10.0.0.255`). CIDR is not supported. Put LAN Prometheus servers and Docker daemons here. Triggers, Resend and OIDC go through `fetch`, whose `NO_PROXY` matcher can differ from the monitors' on unusual entries; stick to hostnames and `.suffix` forms.
 - An API or Prometheus monitor can set its own **Proxy URL** (for example `http://user:$PROXY_PASS@proxy.internal:3128`, with `$SECRET` substitution), which overrides these variables for that monitor.
 - A monitor error of `Failed to establish tunnel to host:443 via …` means the proxy refused the connection: check the proxy credentials, or add the host to `NO_PROXY`.
