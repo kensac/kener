@@ -4,7 +4,7 @@ import mainScheduler from "./schedulers/appScheduler.js";
 import maintenanceScheduler from "./schedulers/maintenanceScheduler.js";
 import dailyCleanupScheduler from "./schedulers/dailyCleanup.js";
 import { InstallEnvProxy } from "./proxy.js";
-import { runRollupBackfill } from "./schedulers/rollupBackfill.js";
+import { runRollupBackfillWithRetry } from "./schedulers/rollupBackfill.js";
 
 process.env.TZ = "UTC";
 
@@ -19,7 +19,7 @@ async function Startup(): Promise<void> {
   // Fills monitoring_data_bucket from the existing history. Runs after the
   // schedulers rather than in a migration, so a large install is not held at
   // the boot screen while it walks the raw rows. Nothing reads the rollup yet.
-  runRollupBackfill().catch((error: unknown) => {
+  runRollupBackfillWithRetry().catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     console.log(`Rollup backfill did not finish: ${message}`);
   });

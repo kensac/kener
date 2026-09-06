@@ -14,6 +14,27 @@ export const BUCKET_SECONDS = 900;
 /** Start of the bucket that contains `ts`. */
 export const bucketStart = (ts: number): number => Math.floor(ts / BUCKET_SECONDS) * BUCKET_SECONDS;
 
+/**
+ * The bucket-start expression, per dialect.
+ *
+ * MySQL has no INTEGER cast target, so a plain CAST(... AS INTEGER) is a syntax
+ * error there. SQLite has no FLOOR. This mirrors the split already used by
+ * getStatusCountsByIntervalGroupedByMonitor.
+ */
+export function bucketExpression(knex: Knex | Knex.Transaction): string {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const client = (knex as any).client?.config?.client;
+  const isSQLite = client === "better-sqlite3" || client === "sqlite3";
+  return isSQLite ? `CAST(timestamp / ? AS INT) * ?` : `FLOOR(timestamp / ?) * ?`;
+}
+
+/** True when the connection cannot take row locks, which is SQLite. */
+export function isSingleWriter(knex: Knex | Knex.Transaction): boolean {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const client = (knex as any).client?.config?.client;
+  return client === "better-sqlite3" || client === "sqlite3";
+}
+
 export interface BucketRow {
   monitor_tag: string;
   bucket_ts: number;
@@ -41,9 +62,10 @@ export async function aggregateRawIntoBuckets(
   fromTs: number,
   toTs: number,
 ): Promise<BucketRow[]> {
+  const bucketExpr = bucketExpression(knex);
   const rows = await knex("monitoring_data")
     .select(
-      knex.raw("CAST(timestamp / ? AS INTEGER) * ? as bucket_ts", [BUCKET_SECONDS, BUCKET_SECONDS]),
+      knex.raw(`${bucketExpr} as bucket_ts`, [BUCKET_SECONDS, BUCKET_SECONDS]),
       knex.raw("SUM(CASE WHEN status = 'UP' THEN 1 ELSE 0 END) as count_of_up"),
       knex.raw("SUM(CASE WHEN status = 'DOWN' THEN 1 ELSE 0 END) as count_of_down"),
       knex.raw("SUM(CASE WHEN status = 'DEGRADED' THEN 1 ELSE 0 END) as count_of_degraded"),
@@ -56,7 +78,7 @@ export async function aggregateRawIntoBuckets(
     .where("monitor_tag", monitorTag)
     .where("timestamp", ">=", fromTs)
     .where("timestamp", "<", toTs)
-    .groupByRaw("CAST(timestamp / ? AS INTEGER) * ?", [BUCKET_SECONDS, BUCKET_SECONDS]);
+    .groupByRaw(bucketExpr, [BUCKET_SECONDS, BUCKET_SECONDS]);
 
   return (rows as Array<Record<string, unknown>>).map((r) => ({
     monitor_tag: monitorTag,
@@ -91,6 +113,16 @@ export async function rebuildBuckets(
 ): Promise<number> {
   const rangeStart = bucketStart(fromTs);
   const rangeEnd = bucketStart(toTs) + BUCKET_SECONDS;
+
+  // Serialise rebuilds for this monitor. Several response workers can write
+  // different timestamps for the same monitor at once, and the backfill can
+  // overlap them. Without this, two transactions each read a snapshot that is
+  // missing the other's row and the later write replaces the bucket with counts
+  // that are short. Taking the monitor row first makes them queue instead.
+  // SQLite takes a database-wide write lock already, so it needs nothing here.
+  if (!isSingleWriter(trx)) {
+    await trx("monitors").where("tag", monitorTag).forUpdate().first();
+  }
 
   const fresh = await aggregateRawIntoBuckets(trx, monitorTag, rangeStart, rangeEnd);
 

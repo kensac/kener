@@ -32,6 +32,10 @@ export async function up(knex: Knex): Promise<void> {
     table.float("max_latency");
     table.float("min_latency");
     table.primary(["monitor_tag", "bucket_ts"]);
+    // Retention deletes by bucket_ts alone. The primary key leads with
+    // monitor_tag, so it gives no useful path for that, and the nightly cleanup
+    // would scan the whole table as the monitor count grows.
+    table.index(["bucket_ts"], "idx_monitoring_data_bucket_ts");
   });
 }
 

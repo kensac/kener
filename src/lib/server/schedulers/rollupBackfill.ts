@@ -1,4 +1,4 @@
-import db from "../db/db.js";
+import db from "$lib/server/db/db";
 import { rebuildAllBucketsForTag } from "../db/repositories/monitoringBuckets.js";
 
 /**
@@ -35,14 +35,19 @@ const writeState = async (state: BackfillState): Promise<void> => {
   await db.insertOrUpdateSiteData(STATE_KEY, JSON.stringify(state), "object");
 };
 
-export async function runRollupBackfill(): Promise<{ built: number; skipped: number }> {
+/** How long to wait before another attempt when some monitors failed. */
+const RETRY_DELAY_MS = 5 * 60 * 1000;
+const MAX_ATTEMPTS = 5;
+
+export async function runRollupBackfill(): Promise<{ built: number; skipped: number; failed: number }> {
   const state = await readState();
-  if (state.done) return { built: 0, skipped: 0 };
+  if (state.done) return { built: 0, skipped: 0, failed: 0 };
 
   const monitors = await db.getMonitors({});
   const completed = new Set(state.completedTags);
   let built = 0;
   let skipped = 0;
+  let failed = 0;
 
   for (const monitor of monitors) {
     if (completed.has(monitor.tag)) {
@@ -57,6 +62,7 @@ export async function runRollupBackfill(): Promise<{ built: number; skipped: num
       completed.add(monitor.tag);
       await writeState({ done: false, completedTags: [...completed] });
     } catch (error) {
+      failed++;
       const message = error instanceof Error ? error.message : String(error);
       console.log(`Rollup backfill failed for ${monitor.tag}: ${message}`);
     }
@@ -68,7 +74,39 @@ export async function runRollupBackfill(): Promise<{ built: number; skipped: num
     console.log(`Rollup backfill complete: ${built} buckets built, ${skipped} monitors already done.`);
   }
 
-  return { built, skipped };
+  return { built, skipped, failed };
 }
 
-export default { runRollupBackfill };
+/**
+ * Runs the backfill and tries again if any monitor failed.
+ *
+ * A failure is usually transient, for example a busy database. Without a retry
+ * the monitors that failed would stay without a rollup until the next restart,
+ * because the backfill only ran at startup.
+ */
+export async function runRollupBackfillWithRetry(attempt = 1): Promise<void> {
+  try {
+    const { failed } = await runRollupBackfill();
+    if (failed === 0 || attempt >= MAX_ATTEMPTS) {
+      if (failed > 0) {
+        console.log(`Rollup backfill gave up after ${attempt} attempts with ${failed} monitor(s) incomplete.`);
+      }
+      return;
+    }
+    console.log(`Rollup backfill has ${failed} monitor(s) left, trying again in ${RETRY_DELAY_MS / 60000} minutes.`);
+  } catch (error) {
+    if (attempt >= MAX_ATTEMPTS) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.log(`Rollup backfill gave up after ${attempt} attempts: ${message}`);
+      return;
+    }
+  }
+
+  const timer = setTimeout(() => {
+    void runRollupBackfillWithRetry(attempt + 1);
+  }, RETRY_DELAY_MS);
+  // Do not hold the process open just for a retry.
+  if (typeof timer.unref === "function") timer.unref();
+}
+
+export default { runRollupBackfill, runRollupBackfillWithRetry };

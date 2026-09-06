@@ -3,6 +3,8 @@ import Knex from "knex";
 import type { Knex as KnexType } from "knex";
 import {
   BUCKET_SECONDS,
+  bucketExpression,
+  isSingleWriter,
   aggregateRawIntoBuckets,
   bucketStart,
   deleteBucketsBefore,
@@ -112,6 +114,31 @@ describe("bucket boundaries", () => {
     expect(bucketStart(T0)).toBe(T0);
     expect(bucketStart(T0 + 899)).toBe(T0);
     expect(bucketStart(T0 + 900)).toBe(T0 + 900);
+  });
+});
+
+// The bucket expression has to be written differently per dialect. MySQL has no
+// INTEGER cast target and SQLite has no FLOOR, so a single expression cannot
+// serve both. These tests only ever run against SQLite, so the other dialects
+// need checking here rather than through a query.
+describe("dialect handling", () => {
+  const fake = (client: string) => ({ client: { config: { client } } }) as never;
+
+  it("uses a CAST on SQLite", () => {
+    expect(bucketExpression(fake("better-sqlite3"))).toContain("CAST");
+    expect(bucketExpression(fake("sqlite3"))).toContain("CAST");
+  });
+
+  it.each(["pg", "mysql", "mysql2"])("uses FLOOR on %s, because INTEGER is not a valid cast target", (client) => {
+    const expr = bucketExpression(fake(client));
+    expect(expr).toContain("FLOOR");
+    expect(expr).not.toContain("CAST");
+  });
+
+  it("treats only SQLite as a single writer, so the others take a row lock", () => {
+    expect(isSingleWriter(fake("better-sqlite3"))).toBe(true);
+    expect(isSingleWriter(fake("sqlite3"))).toBe(true);
+    for (const client of ["pg", "mysql", "mysql2"]) expect(isSingleWriter(fake(client))).toBe(false);
   });
 });
 
