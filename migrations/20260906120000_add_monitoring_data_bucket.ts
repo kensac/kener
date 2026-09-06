@@ -26,11 +26,13 @@ export async function up(knex: Knex): Promise<void> {
     table.integer("count_of_down").notNullable().defaultTo(0);
     table.integer("count_of_degraded").notNullable().defaultTo(0);
     table.integer("count_of_maintenance").notNullable().defaultTo(0);
-    // Totals rather than an average, so buckets stay addable.
-    table.float("latency_sum").notNullable().defaultTo(0);
+    // Totals rather than an average, so buckets stay addable. Double, not float:
+    // knex float maps to a 4 byte real on Postgres, which holds about 7
+    // significant digits, and this column accumulates a sum.
+    table.double("latency_sum").notNullable().defaultTo(0);
     table.integer("latency_count").notNullable().defaultTo(0);
-    table.float("max_latency");
-    table.float("min_latency");
+    table.double("max_latency");
+    table.double("min_latency");
     table.primary(["monitor_tag", "bucket_ts"]);
     // Retention deletes by bucket_ts alone. The primary key leads with
     // monitor_tag, so it gives no useful path for that, and the nightly cleanup

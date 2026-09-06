@@ -291,19 +291,20 @@ export class MonitoringRepository extends BaseRepository {
     const cutoffTimestamp = GetMinuteStartNowTimestampUTC() - 86400 * safeRetentionDays;
 
     return await this.knex.transaction(async (trx: KnexType.Transaction) => {
-      const affected = (await trx("monitoring_data")
-        .where("timestamp", "<", cutoffTimestamp)
-        .distinct("monitor_tag")) as Array<{ monitor_tag: string }>;
-
       const deleted = await trx("monitoring_data").where("timestamp", "<", cutoffTimestamp).del();
 
       // Buckets that fall entirely before the cutoff go with the raw rows.
       await deleteBucketsBefore(trx, cutoffTimestamp);
 
-      // The cutoff is minute aligned, so it usually lands inside a bucket. That
-      // one straddling bucket per monitor still has raw rows and must be redone.
-      for (const row of affected) {
-        await rebuildBuckets(trx, row.monitor_tag, cutoffTimestamp, cutoffTimestamp);
+      // The cutoff is minute aligned, so it usually lands inside a bucket, and
+      // that straddling bucket still holds the rows at or after the cutoff.
+      // Walk the monitors table rather than asking monitoring_data which tags
+      // were touched: the monitor list is small and already indexed, while that
+      // question means a second scan of everything the delete just matched.
+      // Rebuilding a bucket with no rows behind it is a no-op.
+      const monitors = (await trx("monitors").select("tag")) as Array<{ tag: string }>;
+      for (const monitor of monitors) {
+        await rebuildBuckets(trx, monitor.tag, cutoffTimestamp, cutoffTimestamp);
       }
 
       return deleted;
