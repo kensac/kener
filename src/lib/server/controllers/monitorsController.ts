@@ -29,6 +29,7 @@ import { GetLastMonitoringValue, SetLastHeartbeat, DeleteMonitorCaches } from ".
 import { CollapseStatusCounts } from "../../clientTools.js";
 import { translate, isLocaleAvailable } from "../i18n.js";
 import type { HeartbeatMonitor, GroupMonitorTypeData } from "../types/monitor.js";
+import { IsValidProxyURL } from "../../anywhere.js";
 
 interface GroupUpdateData {
   monitor_tag: string;
@@ -193,8 +194,28 @@ export const GetMonitorsParsed = async (query: MonitorFilter): Promise<Array<Mon
   return parsedMonitors;
 };
 
+/**
+ * type_data.proxy must be an http(s):// URL. Node silently ignores any other scheme, which
+ * would run the check unproxied and report UP, so save is where a typo has to fail.
+ * `$SECRET` tokens are still raw here and pass. Unparseable type_data is not this check's problem.
+ */
+function validateTypeDataProxy(monitor: MonitorInput): void {
+  if (!monitor.type_data) return;
+  let typeData: unknown;
+  try {
+    typeData = typeof monitor.type_data === "string" ? JSON.parse(monitor.type_data) : monitor.type_data;
+  } catch {
+    return;
+  }
+  const proxy = (typeData as { proxy?: unknown } | null)?.proxy;
+  if (typeof proxy === "string" && proxy.trim() !== "" && !IsValidProxyURL(proxy)) {
+    throw new Error("Proxy URL must start with http:// or https://");
+  }
+}
+
 export const CreateUpdateMonitor = async (monitor: MonitorInput): Promise<number | number[]> => {
   let monitorData = { ...monitor };
+  validateTypeDataProxy(monitorData);
   if (monitorData.id) {
     return await db.updateMonitor(monitorData as MonitorRecord);
   } else {
@@ -209,6 +230,7 @@ export const CreateMonitor = async (monitor: MonitorInput): Promise<number[]> =>
     throw new Error("monitor id must be empty or 0");
   }
   validateMonitorTag(monitorData.tag);
+  validateTypeDataProxy(monitorData);
   return await db.insertMonitor(monitorData);
 };
 

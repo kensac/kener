@@ -64,6 +64,13 @@ export type DockerCheckType = (typeof DOCKER_CHECK_TYPES)[number];
 export const DOCKER_DEFAULT_TIMEOUT = 10 * 1000; // 10 seconds
 export const DOCKER_DEFAULT_SOCKET_PATH = "/var/run/docker.sock";
 
+// Outbound HTTP proxy for API/Prometheus monitors (type_data.proxy). Node silently ignores a
+// proxy URL whose scheme is not exactly `http://` or `https://` (uppercase included), so the
+// scheme is checked on save instead. `$SECRET` tokens in the userinfo part pass.
+export function IsValidProxyURL(proxy: string): boolean {
+  return /^https?:\/\/\S+$/.test(proxy.trim());
+}
+
 export const ErrorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="60" viewBox="0 0 120 60" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
   <circle cx="30" cy="24" r="10"/>
   <path d="M26 27h8"/>

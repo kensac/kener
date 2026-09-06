@@ -102,7 +102,7 @@
     "vitest-browser-svelte": "^3.0.0"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=24.14.0"
   },
   "dependencies": {
     "@babel/runtime": "^7.28.4",
