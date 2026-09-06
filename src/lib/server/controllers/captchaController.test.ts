@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const { GetAllCaptchaData } = vi.hoisted(() => ({ GetAllCaptchaData: vi.fn() }));
 vi.mock("./siteDataController.js", () => ({ GetAllCaptchaData }));
 
-import { GetActiveCaptchaProvider, VerifyCaptchaToken } from "./captchaController";
+import { GetActiveCaptchaProvider, GetPublicCaptchaConfig, VerifyCaptchaToken } from "./captchaController";
 
 describe("captchaController", () => {
   afterEach(() => {
@@ -37,6 +37,34 @@ describe("captchaController", () => {
     it("returns null when the enabled entry is missing its keys", async () => {
       GetAllCaptchaData.mockResolvedValue([{ key: "captcha.recaptcha", value: { isEnabled: true, requirements: {} } }]);
       expect(await GetActiveCaptchaProvider()).toBeNull();
+    });
+  });
+
+  describe("GetPublicCaptchaConfig", () => {
+    it("reports captcha off when no provider is enabled", async () => {
+      GetAllCaptchaData.mockResolvedValue([{ key: "captcha.hcaptcha", value: { isEnabled: false, requirements: {} } }]);
+      expect(await GetPublicCaptchaConfig()).toEqual({ provider: null, siteKey: null, misconfigured: false });
+    });
+
+    it("exposes the site key but never the secret for an active provider", async () => {
+      GetAllCaptchaData.mockResolvedValue([
+        {
+          key: "captcha.turnstile",
+          value: { isEnabled: true, requirements: { "Site Key": "site-abc", "Secret Key": "secret-xyz" } },
+        },
+      ]);
+      const config = await GetPublicCaptchaConfig();
+      expect(config).toEqual({ provider: "turnstile", siteKey: "site-abc", misconfigured: false });
+      expect(JSON.stringify(config)).not.toContain("secret-xyz");
+    });
+
+    // The pair that used to disagree: VerifyCaptchaToken fails closed here, so
+    // the public config must not report this state as "captcha off" — that
+    // combination dead-ended the subscribe form with no challenge to solve.
+    it("reports misconfigured, not off, when the enabled provider is missing its keys", async () => {
+      GetAllCaptchaData.mockResolvedValue([{ key: "captcha.recaptcha", value: { isEnabled: true, requirements: {} } }]);
+      expect(await GetPublicCaptchaConfig()).toEqual({ provider: null, siteKey: null, misconfigured: true });
+      expect(await VerifyCaptchaToken("any-token")).toEqual({ success: false });
     });
   });
 

@@ -103,6 +103,7 @@
 
   let provider = $state<ProviderName | null>(null);
   let siteKey = $state<string | null>(null);
+  let misconfigured = $state(false);
   let container: HTMLDivElement | undefined = $state();
   let widgetId: string | number | undefined;
 
@@ -128,6 +129,15 @@
       const config = await response.json();
 
       if (!config.provider || !config.siteKey) {
+        // A provider enabled without its Site Key/Secret Key still counts as
+        // required — the server rejects every token in that state — so keep
+        // the form blocked and say why, instead of silently pretending
+        // captcha is off and letting the submit fail with no challenge.
+        if (config.misconfigured) {
+          misconfigured = true;
+          onReady?.(true);
+          return;
+        }
         onReady?.(false);
         return;
       }
@@ -171,6 +181,10 @@
 
 {#if provider}
   <div bind:this={container} data-testid="captcha-widget"></div>
+{:else if misconfigured}
+  <p class="text-destructive text-sm" data-testid="captcha-misconfigured">
+    CAPTCHA is enabled but not fully configured. Please contact the site administrator.
+  </p>
 {/if}
 
 <style>

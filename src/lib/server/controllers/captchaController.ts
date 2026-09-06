@@ -49,6 +49,33 @@ export async function GetActiveCaptchaProvider(): Promise<ActiveCaptchaProvider 
   return resolution.status === "active" ? resolution.provider : null;
 }
 
+/**
+ * The public (site-key only) view of the captcha config.
+ *
+ * "Enabled" means "required" everywhere: the credentials only decide
+ * whether a challenge can be *drawn*, never whether protection applies.
+ * A provider enabled without its keys is therefore reported as required
+ * but unrenderable, so the client can say so and keep the form blocked —
+ * rather than being flattened into `null`, which the client would read as
+ * "captcha is off" while VerifyCaptchaToken went on rejecting every
+ * request, dead-ending the form with no challenge to solve.
+ */
+export async function GetPublicCaptchaConfig(): Promise<{
+  provider: CaptchaProviderName | null;
+  siteKey: string | null;
+  misconfigured: boolean;
+}> {
+  const resolution = await resolveCaptchaConfig();
+  if (resolution.status === "active") {
+    return {
+      provider: resolution.provider.provider,
+      siteKey: resolution.provider.siteKey,
+      misconfigured: false,
+    };
+  }
+  return { provider: null, siteKey: null, misconfigured: resolution.status === "misconfigured" };
+}
+
 export async function VerifyCaptchaToken(token: string | undefined | null): Promise<{ success: boolean }> {
   const resolution = await resolveCaptchaConfig();
 

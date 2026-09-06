@@ -19,6 +19,25 @@ describe("Captcha", () => {
     expect(onVerify).not.toHaveBeenCalled();
   });
 
+  it("reports required and explains itself when a provider is enabled without its keys", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ json: async () => ({ provider: null, siteKey: null, misconfigured: true }) }),
+    );
+    const onReady = vi.fn();
+    const onVerify = vi.fn();
+
+    const screen = await render(Captcha, { onVerify, onReady });
+    await expect.element(screen.getByTestId("captcha-misconfigured")).toBeInTheDocument();
+    await expect.element(screen.getByTestId("captcha-widget")).not.toBeInTheDocument();
+
+    // Required, not off: the server rejects every token in this state, so the
+    // parent must keep the submit blocked rather than letting it fail silently.
+    expect(onReady).toHaveBeenCalledWith(true);
+    expect(onReady).not.toHaveBeenCalledWith(false);
+    expect(onVerify).not.toHaveBeenCalled();
+  });
+
   it("renders the widget container and reports required when a provider is configured", async () => {
     vi.stubGlobal(
       "fetch",
