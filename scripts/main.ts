@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 import express from "express";
-import compression from "compression";
+import { compressionMiddleware, isCompressionEnabled } from "../src/lib/server/httpCompression.ts";
 import Startup from "../src/lib/server/startup.ts";
 import shutdownSchedulers from "../src/lib/server/schedulers/shutdown.ts";
 import shutdownQueues from "../src/lib/server/queues/shutdown.ts";
@@ -26,8 +26,8 @@ async function start() {
   // status page ships its monitor-bar payload raw: a 63 monitor page is 847 KB
   // uncompressed and 64 KB compressed. Deployments behind a proxy that already
   // compresses can skip this with KENER_DISABLE_COMPRESSION=true.
-  if (process.env.KENER_DISABLE_COMPRESSION !== "true") {
-    app.use(compression());
+  if (isCompressionEnabled()) {
+    app.use(compressionMiddleware());
   }
 
   // Caps a health probe at 2s so a wedged dependency can not hang the
