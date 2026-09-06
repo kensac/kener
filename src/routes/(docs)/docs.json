@@ -244,6 +244,10 @@
                     {
                       "title": "Analytics",
                       "content": "v4/analytics"
+                    },
+                    {
+                      "title": "Captcha",
+                      "content": "v4/captcha"
                     }
                   ]
                 }
