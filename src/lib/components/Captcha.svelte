@@ -78,7 +78,11 @@
   import clientResolver from "$lib/client/resolver.js";
 
   interface Props {
-    onVerify: (token: string) => void;
+    // Carries the *current* token, so `null` means "no valid token right now"
+    // — an expired or errored challenge reports null the same way a fresh
+    // mount has none, and the parent's existing `!captchaToken` guard
+    // re-disables submit without needing any extra state.
+    onVerify: (token: string | null) => void;
     onReady?: (required: boolean) => void;
   }
 
@@ -155,7 +159,14 @@
         if (container && global?.render) {
           widgetId = global.render(container, {
             sitekey: siteKey,
-            callback: (token: string) => onVerify(token)
+            callback: (token: string) => onVerify(token),
+            // A solved token expires (~2 min) while the email form sits open.
+            // All three SDKs converge on these two hyphenated option names
+            // just as they do on `callback`, so one shape covers them all.
+            // Without them the stale token stayed in the parent and kept
+            // Continue enabled until a wasted round-trip failed server-side.
+            "expired-callback": () => onVerify(null),
+            "error-callback": () => onVerify(null)
           });
         }
       };

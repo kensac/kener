@@ -52,6 +52,51 @@ describe("Captcha", () => {
     expect(onReady).toHaveBeenCalledWith(true);
   });
 
+  it("reports null when a solved token expires or errors, so the parent re-disables submit", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ json: async () => ({ provider: "hcaptcha", siteKey: "site-key-123" }) }),
+    );
+
+    const script = document.createElement("script");
+    script.src = "https://js.hcaptcha.com/1/api.js";
+    document.head.appendChild(script);
+    setTimeout(() => script.dispatchEvent(new Event("load")), 10);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let opts: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).hcaptcha = {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      render: (_container: HTMLElement, options: any) => {
+        opts = options;
+        return "widget-1";
+      },
+    };
+
+    const onVerify = vi.fn();
+    await render(Captcha, { onVerify, onReady: vi.fn() });
+
+    await vi.waitFor(() => expect(opts).toBeDefined());
+
+    opts.callback("solved-token");
+    expect(onVerify).toHaveBeenLastCalledWith("solved-token");
+
+    // The token expires while the email form is still open. Without this the
+    // stale token stayed set and Continue stayed enabled until the server
+    // rejected it a round-trip later.
+    opts["expired-callback"]();
+    expect(onVerify).toHaveBeenLastCalledWith(null);
+
+    opts.callback("solved-again");
+    opts["error-callback"]();
+    expect(onVerify).toHaveBeenLastCalledWith(null);
+
+    document.head.removeChild(script);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (window as any).hcaptcha;
+  });
+
   it("does not walk back the required state when the provider SDK fails after being detected", async () => {
     vi.stubGlobal(
       "fetch",
